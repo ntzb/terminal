@@ -28,6 +28,8 @@ jobs:
           fetch-depth: 1
 
       - uses: microsoft/setup-msbuild@main
+        with:
+          msbuild-architecture: x64
 
       - name: Set package identity
         run: |

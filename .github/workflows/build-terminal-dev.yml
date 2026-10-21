@@ -94,7 +94,7 @@ jobs:
             $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.0.*\x64\signtool.exe" | Sort-Object FullName | Select-Object -Last 1
             & $signtool.FullName sign /fd SHA256 /f $pfx /p $env:SIGNING_PFX_PASSWORD /tr http://timestamp.digicert.com /td SHA256 $staged
             if ($LASTEXITCODE) { exit $LASTEXITCODE }
-            $cert = [Security.Cryptography.X509Certificates.X509Certificate2]::new($pfx, $env:SIGNING_PFX_PASSWORD)
+            $cert = [Security.Cryptography.X509Certificates.X509Certificate2]::new($pfx, $env:SIGNING_PFX_PASSWORD, 'EphemeralKeySet')
             [IO.File]::WriteAllBytes((Join-Path $out 'terminal-dev.cer'), $cert.Export('Cert'))
           } finally {
             Remove-Item $pfx -Force

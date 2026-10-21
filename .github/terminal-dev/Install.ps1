@@ -1,3 +1,4 @@
+#Requires -PSEdition Desktop
 # Installs the Terminal Dev package that sits next to this script.
 # Trusts the self-signed signing certificate first (one admin prompt), then
 # installs the MSIX plus any framework dependency that isn't already present.
@@ -34,5 +35,7 @@ $deps = foreach ($appx in Get-ChildItem (Join-Path $PSScriptRoot 'Dependencies')
 }
 
 Write-Host "Installing $($msix.Name)..."
-Add-AppxPackage -Path $msix.FullName -DependencyPath @($deps) -ForceUpdateFromAnyVersion
+$params = @{ Path = $msix.FullName; ForceUpdateFromAnyVersion = $true }
+if ($deps) { $params.DependencyPath = @($deps) }
+Add-AppxPackage @params
 Get-AppxPackage WindowsTerminalDev | Select-Object Name, Version, PackageFamilyName

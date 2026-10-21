@@ -26,12 +26,13 @@ namespace winrt::TerminalApp::implementation
     class DesktopNotification
     {
     public:
-        static bool ShouldSendNotification();
+        static bool ShouldSendNotification(const winrt::hstring& tag);
         static void SendNotification(const DesktopNotificationArgs& args, std::function<void()> activatedFunc);
         static void RemoveNotification(const winrt::hstring& tag);
 
     private:
-        static std::atomic<uint64_t> _lastNotificationTime;
+        static std::mutex _lastNotificationTimesMutex;
+        static std::unordered_map<std::wstring, uint64_t> _lastNotificationTimes;
 
         static constexpr std::wstring_view NotificationGroup{ L"WindowsTerminal" };
 

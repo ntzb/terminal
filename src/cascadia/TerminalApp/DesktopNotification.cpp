@@ -11,26 +11,26 @@ using namespace winrt::Windows::Data::Xml::Dom;
 
 namespace winrt::TerminalApp::implementation
 {
-    std::atomic<uint64_t> DesktopNotification::_lastNotificationTime{ 0 };
+    std::mutex DesktopNotification::_lastNotificationTimesMutex;
+    std::unordered_map<std::wstring, uint64_t> DesktopNotification::_lastNotificationTimes;
 
     // Method Description:
-    // - Rate-limits toast notifications so we don't spam the user.
+    // - Rate-limits toast notifications per tag (i.e. per tab) so one tab can't
+    //   spam the user, while toasts from different tabs still stack.
     // Return Value:
     // - Returns true if a notification is allowed, false if too recent.
-    bool DesktopNotification::ShouldSendNotification()
+    bool DesktopNotification::ShouldSendNotification(const winrt::hstring& tag)
     {
         const auto now = GetTickCount64();
-        auto last = _lastNotificationTime.load(std::memory_order_relaxed);
+        const std::scoped_lock lock{ _lastNotificationTimesMutex };
 
         // Subtraction wraps cleanly modulo 2^64, so the delta is correct even
         // across the (~584 million year) GetTickCount64 rollover.
-        if (now - last < MinNotificationIntervalMs)
-        {
-            return false;
-        }
+        std::erase_if(_lastNotificationTimes, [now](const auto& entry) {
+            return now - entry.second >= MinNotificationIntervalMs;
+        });
 
-        // Attempt to update; if another thread beat us, that's fine. We'll skip this one.
-        return _lastNotificationTime.compare_exchange_strong(last, now, std::memory_order_relaxed);
+        return _lastNotificationTimes.try_emplace(std::wstring{ tag }, now).second;
     }
 
     // Method Description:
@@ -46,7 +46,7 @@ namespace winrt::TerminalApp::implementation
     {
         try
         {
-            if (!ShouldSendNotification())
+            if (!ShouldSendNotification(args.Tag))
             {
                 return;
             }

@@ -2827,6 +2827,11 @@
           "description": "When set to true, applications can send OSC 777 escape sequences to trigger desktop toast notifications with a custom title and body.",
           "type": "boolean"
         },
+        "stickyNotifications": {
+          "default": false,
+          "description": "When set to true, toast notifications sent by applications (OSC 777) stay on screen until dismissed or clicked. They are removed automatically when the tab that sent them gets focus.",
+          "type": "boolean"
+        },
         "unfocusedAppearance": {
           "$ref": "#/$defs/AppearanceConfig",
           "description": "Sets the appearance of the terminal when it is unfocused.",

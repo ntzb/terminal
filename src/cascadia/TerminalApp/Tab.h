@@ -64,6 +64,8 @@ namespace winrt::TerminalApp::implementation
 
         void Close();
         void Shutdown();
+        void SetPendingToastTag(const winrt::hstring& tag);
+        void ClearPendingToast();
         void ClosePane();
 
         void SetTabText(winrt::hstring title);
@@ -122,7 +124,7 @@ namespace winrt::TerminalApp::implementation
 
         til::typed_event<TerminalApp::Tab, IInspectable> ActivePaneChanged;
         til::event<winrt::delegate<>> TabRaiseVisualBell;
-        til::event<winrt::delegate<winrt::hstring /*title*/, winrt::hstring /*body*/, winrt::TerminalApp::IPaneContent /*content*/>> TabToastNotificationRequested;
+        til::event<winrt::delegate<winrt::hstring /*title*/, winrt::hstring /*body*/, winrt::TerminalApp::IPaneContent /*content*/, bool /*fromApplication*/>> TabToastNotificationRequested;
         til::typed_event<IInspectable, IInspectable> TaskbarProgressChanged;
 
         // The TabViewIndex is the index this Tab object resides in TerminalPage's _tabs vector.
@@ -172,6 +174,7 @@ namespace winrt::TerminalApp::implementation
         std::optional<winrt::Windows::UI::Color> _runtimeTabColor{};
         winrt::TerminalApp::TabHeaderControl _headerControl{};
         winrt::TerminalApp::TerminalTabStatus _tabStatus{};
+        winrt::hstring _pendingToastTag;
 
         winrt::TerminalApp::ColorPickupFlyout _tabColorPickup{ nullptr };
         winrt::event_token _colorSelectedToken;

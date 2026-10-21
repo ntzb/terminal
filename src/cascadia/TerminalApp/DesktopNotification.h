@@ -20,6 +20,7 @@ namespace winrt::TerminalApp::implementation
         winrt::hstring Title;
         winrt::hstring Message;
         winrt::hstring Tag;
+        bool Sticky{ false };
     };
 
     class DesktopNotification
@@ -27,9 +28,12 @@ namespace winrt::TerminalApp::implementation
     public:
         static bool ShouldSendNotification();
         static void SendNotification(const DesktopNotificationArgs& args, std::function<void()> activatedFunc);
+        static void RemoveNotification(const winrt::hstring& tag);
 
     private:
         static std::atomic<uint64_t> _lastNotificationTime;
+
+        static constexpr std::wstring_view NotificationGroup{ L"WindowsTerminal" };
 
         // Minimum interval between notifications, in milliseconds (GetTickCount64 units).
         static constexpr uint64_t MinNotificationIntervalMs = 5'000;

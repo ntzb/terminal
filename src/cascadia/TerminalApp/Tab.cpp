@@ -4,6 +4,7 @@
 #include "pch.h"
 #include "ColorPickupFlyout.h"
 #include "Tab.h"
+#include "DesktopNotification.h"
 #include "SettingsPaneContent.h"
 #include "Tab.g.cpp"
 #include "Utils.h"
@@ -360,6 +361,7 @@ namespace winrt::TerminalApp::implementation
             {
                 ShowBellIndicator(false);
             }
+            ClearPendingToast();
         }
     }
 
@@ -980,12 +982,31 @@ namespace winrt::TerminalApp::implementation
     {
         ASSERT_UI_THREAD();
 
+        ClearPendingToast();
+
         // NOTE: `TerminalPage::_HandleCloseTabRequested` relies on the content being null after this call.
         Content(nullptr);
 
         if (_rootPane)
         {
             _rootPane->Shutdown();
+        }
+    }
+
+    // Method Description:
+    // - Remembers the tag of a sticky toast this tab raised, so it can be
+    //   removed once the user comes back to the tab on their own.
+    void Tab::SetPendingToastTag(const winrt::hstring& tag)
+    {
+        _pendingToastTag = tag;
+    }
+
+    void Tab::ClearPendingToast()
+    {
+        if (!_pendingToastTag.empty())
+        {
+            DesktopNotification::RemoveNotification(_pendingToastTag);
+            _pendingToastTag = {};
         }
     }
 
@@ -1187,7 +1208,7 @@ namespace winrt::TerminalApp::implementation
                     // sending repeated toasts for repeated BEL characters.
                     if (bellArgs.SendNotification() && !tab->_tabStatus.BellIndicator())
                     {
-                        tab->TabToastNotificationRequested.raise(tab->Title(), L"", sender);
+                        tab->TabToastNotificationRequested.raise(tab->Title(), L"", sender, false);
                     }
 
                     // Show the bell indicator in the tab header
@@ -1216,7 +1237,7 @@ namespace winrt::TerminalApp::implementation
                 if (const auto tab{ weakThisCopy.get() })
                 {
                     const auto title = notifArgs.Title().empty() ? tab->Title() : notifArgs.Title();
-                    tab->TabToastNotificationRequested.raise(title, notifArgs.Body(), sender);
+                    tab->TabToastNotificationRequested.raise(title, notifArgs.Body(), sender, true);
                 }
             });
 
@@ -1456,6 +1477,7 @@ namespace winrt::TerminalApp::implementation
                 {
                     tab->ShowBellIndicator(false);
                 }
+                tab->ClearPendingToast();
             }
         });
 

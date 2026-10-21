@@ -2512,6 +2512,16 @@ namespace winrt::TerminalApp::implementation
             }
         }
 
+        // Closing the window doesn't shut down its tabs one by one, so clear
+        // their sticky toasts here; clicking one would have nothing to go to.
+        for (const auto& tab : _tabs)
+        {
+            if (auto tabImpl{ _GetTabImpl(tab) })
+            {
+                tabImpl->ClearPendingToast();
+            }
+        }
+
         CloseWindowRequested.raise(*this, nullptr);
     }
 
@@ -5368,6 +5378,11 @@ namespace winrt::TerminalApp::implementation
 
         if (const auto& tab{ _GetFocusedTabImpl() })
         {
+            if (activated)
+            {
+                tab->ClearPendingToast();
+            }
+
             if (tab->TabStatus().IsInputBroadcastActive())
             {
                 tab->GetRootPane()->WalkTree([activated](const auto& p) {

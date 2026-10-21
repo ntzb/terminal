@@ -161,12 +161,12 @@ namespace winrt::TerminalApp::implementation
 
         // When a tab requests a desktop toast notification, send the toast
         // and handle activation by summoning this window and switching to the tab.
-        newTabImpl->TabToastNotificationRequested([weakThis{ get_weak() }, weakTab{ newTabImpl->get_weak() }](const winrt::hstring& title, const winrt::hstring& body, const winrt::TerminalApp::IPaneContent& content) {
+        newTabImpl->TabToastNotificationRequested([weakThis{ get_weak() }, weakTab{ newTabImpl->get_weak() }](const winrt::hstring& title, const winrt::hstring& body, const winrt::TerminalApp::IPaneContent& content, const bool fromApplication) {
             if (const auto page{ weakThis.get() })
             {
                 if (const auto tab{ weakTab.get() })
                 {
-                    page->_SendDesktopNotification(title, body, tab, content);
+                    page->_SendDesktopNotification(title, body, tab, content, fromApplication);
                 }
             }
         });
@@ -1333,7 +1333,7 @@ namespace winrt::TerminalApp::implementation
     // - tabTitle: The title to display in the notification.
     // - body: The body text. If empty, a standard tab-activity message is built.
     // - tab: The tab to switch to when the toast is activated.
-    void TerminalPage::_SendDesktopNotification(const winrt::hstring& tabTitle, const winrt::hstring& body, const winrt::com_ptr<Tab>& tab, const winrt::TerminalApp::IPaneContent& content)
+    void TerminalPage::_SendDesktopNotification(const winrt::hstring& tabTitle, const winrt::hstring& body, const winrt::com_ptr<Tab>& tab, const winrt::TerminalApp::IPaneContent& content, const bool fromApplication)
     {
         // Don't send a notification if the window is focused and the requesting
         // pane is the active pane. The user is already looking at it.
@@ -1384,11 +1384,29 @@ namespace winrt::TerminalApp::implementation
         const hstring tabTag{ fmt::format(FMT_COMPILE(L"wt-tab-{:08x}"), tabHash) };
 #endif
 
+        // Only notifications an application asked for (OSC 777) can be sticky;
+        // a stray BEL shouldn't leave a toast on screen until dismissed.
+        auto sticky = false;
+        if (fromApplication)
+        {
+            if (const auto terminalContent{ content.try_as<winrt::TerminalApp::TerminalPaneContent>() })
+            {
+                const auto profile{ terminalContent.GetProfile() };
+                sticky = profile && profile.StickyNotifications();
+            }
+        }
+
         const implementation::DesktopNotificationArgs args{
             .Title = notificationTitle,
             .Message = message,
-            .Tag = tabTag
+            .Tag = tabTag,
+            .Sticky = sticky
         };
+
+        if (sticky)
+        {
+            tab->SetPendingToastTag(tabTag);
+        }
 
         implementation::DesktopNotification::SendNotification(args, [weakThis{ get_weak() }, weakTab{ tab->get_weak() }, weakContent{ winrt::make_weak(content) }]() {
             if (const auto page{ weakThis.get() })

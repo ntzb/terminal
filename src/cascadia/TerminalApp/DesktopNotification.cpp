@@ -78,7 +78,19 @@ namespace winrt::TerminalApp::implementation
             // AppCommandlineArgs::ParseArgs as a no-op sentinel.
             toastElement.SetAttribute(L"launch", L"--from-toast");
 
-            toastElement.SetAttribute(L"scenario", L"default");
+            // Only the reminder scenario stays on screen until dismissed, and
+            // Windows requires such a toast to have at least one button.
+            toastElement.SetAttribute(L"scenario", args.Sticky ? L"reminder" : L"default");
+            if (args.Sticky)
+            {
+                auto dismiss = toastXml.CreateElement(L"action");
+                dismiss.SetAttribute(L"activationType", L"system");
+                dismiss.SetAttribute(L"arguments", L"dismiss");
+                dismiss.SetAttribute(L"content", L"");
+                auto actions = toastXml.CreateElement(L"actions");
+                actions.AppendChild(dismiss);
+                toastElement.AppendChild(actions);
+            }
 
             auto toast = ToastNotification{ toastXml };
 
@@ -86,7 +98,7 @@ namespace winrt::TerminalApp::implementation
             // Repeated notifications with the same tag replace the previous one
             // rather than stacking in the notification center.
             toast.Tag(args.Tag);
-            toast.Group(L"WindowsTerminal");
+            toast.Group(NotificationGroup);
 
             // When the user activates (clicks) the toast, fire the callback.
             if (activatedFunc)
@@ -123,6 +135,32 @@ namespace winrt::TerminalApp::implementation
             // Toast notification is a best-effort feature. If it fails (e.g., notifications
             // are disabled, or the app is unpackaged without proper AUMID setup), we silently
             // ignore the error.
+            LOG_CAUGHT_EXCEPTION();
+        }
+    }
+
+    // Method Description:
+    // - Removes a previously sent toast (on screen or in the notification
+    //   center) by its tag. Removing a toast that no longer exists is a no-op.
+    void DesktopNotification::RemoveNotification(const winrt::hstring& tag)
+    {
+        try
+        {
+            if (IsPackaged())
+            {
+                ToastNotificationManager::History().Remove(tag, NotificationGroup);
+            }
+            else
+            {
+                wil::unique_cotaskmem_string aumid;
+                if (SUCCEEDED(GetCurrentProcessExplicitAppUserModelID(&aumid)))
+                {
+                    ToastNotificationManager::History().Remove(tag, NotificationGroup, aumid.get());
+                }
+            }
+        }
+        catch (...)
+        {
             LOG_CAUGHT_EXCEPTION();
         }
     }

@@ -85,7 +85,7 @@ namespace winrt::TerminalApp::implementation
             {
                 auto dismiss = toastXml.CreateElement(L"action");
                 dismiss.SetAttribute(L"activationType", L"system");
-                dismiss.SetAttribute(L"arguments", L"dismiss");
+                dismiss.SetAttribute(L"arguments", DismissArguments);
                 dismiss.SetAttribute(L"content", L"");
                 auto actions = toastXml.CreateElement(L"actions");
                 actions.AppendChild(dismiss);
@@ -103,7 +103,13 @@ namespace winrt::TerminalApp::implementation
             // When the user activates (clicks) the toast, fire the callback.
             if (activatedFunc)
             {
-                toast.Activated([activatedFunc = std::move(activatedFunc)](const auto& /*sender*/, const auto& /*eventArgs*/) {
+                toast.Activated([activatedFunc = std::move(activatedFunc)](const auto& /*sender*/, const auto& eventArgs) {
+                    // Some Windows builds also raise Activated for the system
+                    // Dismiss button; that must not switch tabs.
+                    if (const auto toastArgs{ eventArgs.try_as<ToastActivatedEventArgs>() }; toastArgs && toastArgs.Arguments() == DismissArguments)
+                    {
+                        return;
+                    }
                     activatedFunc();
                 });
             }

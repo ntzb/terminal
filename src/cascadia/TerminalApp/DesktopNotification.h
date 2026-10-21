@@ -35,6 +35,7 @@ namespace winrt::TerminalApp::implementation
         static std::unordered_map<std::wstring, uint64_t> _lastNotificationTimes;
 
         static constexpr std::wstring_view NotificationGroup{ L"WindowsTerminal" };
+        static constexpr std::wstring_view DismissArguments{ L"dismiss" };
 
         // Minimum interval between notifications, in milliseconds (GetTickCount64 units).
         static constexpr uint64_t MinNotificationIntervalMs = 5'000;

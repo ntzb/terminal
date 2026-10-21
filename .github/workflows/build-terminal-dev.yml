@@ -1,0 +1,132 @@
+name: Build Terminal Dev package
+
+on:
+  push:
+    branches: [sticky-notifications]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 300
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      PACKAGE_VERSION: 1.26.${{ github.run_number }}.${{ github.run_attempt }}
+      PACKAGE_PUBLISHER: ${{ vars.PACKAGE_PUBLISHER }}
+    steps:
+      - uses: actions/checkout@main
+        with:
+          fetch-depth: 1
+
+      - uses: microsoft/setup-msbuild@main
+
+      - name: Set package identity
+        run: |
+          if (-not $env:PACKAGE_PUBLISHER) { throw 'Repository variable PACKAGE_PUBLISHER is not set' }
+          $path = Join-Path $env:GITHUB_WORKSPACE 'src\cascadia\CascadiaPackage\Package-Dev.appxmanifest'
+          $xml = [xml](Get-Content -Raw $path)
+          $xml.Package.Identity.Publisher = $env:PACKAGE_PUBLISHER
+          $xml.Package.Identity.Version = $env:PACKAGE_VERSION
+          $xml.Save($path)
+          $check = ([xml](Get-Content -Raw $path)).Package.Identity
+          if ($check.Publisher -ne $env:PACKAGE_PUBLISHER -or $check.Version -ne $env:PACKAGE_VERSION) { throw 'Manifest patch failed' }
+          Write-Host "Identity: $($check.Name) $($check.Version) $($check.Publisher)"
+
+      - name: Locate vcpkg and VC tools
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsRoot = & $vswhere -requires Microsoft.VisualStudio.Component.Vcpkg -property installationPath -latest
+          if (-not $vsRoot) { throw 'No Visual Studio with the vcpkg component' }
+          "VCPKG_ROOT=$(Join-Path $vsRoot 'VC\vcpkg')" >> $env:GITHUB_ENV
+          $out = & .\build\scripts\Set-LatestVCToolsVersion.ps1
+          $out | Write-Host
+          $line = $out | Where-Object { $_ -match 'variable=VCToolsVersion\]' } | Select-Object -Last 1
+          if ("$line" -notmatch 'variable=VCToolsVersion\](.+)$') { throw 'Could not determine VCToolsVersion' }
+          "VCToolsVersion=$($Matches[1].Trim())" >> $env:GITHUB_ENV
+
+      - name: Restore NuGet packages
+        run: |
+          nuget restore build\packages.config -ConfigFile NuGet.Config -PackagesDirectory packages -NonInteractive
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          nuget restore dep\nuget\packages.config -ConfigFile NuGet.Config -PackagesDirectory packages -NonInteractive
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          msbuild OpenConsole.slnx /t:Restore /p:Configuration=Release /p:Platform=x64 /nologo /v:minimal
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Generate NOTICE.html
+        run: .\build\scripts\Generate-ThirdPartyNotices.ps1 -MarkdownNoticePath .\NOTICE.md -OutputPath .\src\cascadia\CascadiaPackage\NOTICE.html
+
+      - name: Build
+        run: |
+          msbuild OpenConsole.slnx /m /nologo /v:minimal `
+            /p:Configuration=Release /p:Platform=x64 `
+            /p:WindowsTerminalOfficialBuild=true /p:WindowsTerminalBranding=Dev /p:PGOBuildMode=None `
+            /p:AppxSymbolPackageEnabled=false `
+            /t:Terminal\CascadiaPackage `
+            /bl:msbuild.binlog
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Check, sign and stage package
+        env:
+          SIGNING_PFX_BASE64: ${{ secrets.SIGNING_PFX_BASE64 }}
+          SIGNING_PFX_PASSWORD: ${{ secrets.SIGNING_PFX_PASSWORD }}
+        run: |
+          $msix = Get-ChildItem src\cascadia\CascadiaPackage\AppPackages -Recurse -Filter 'CascadiaPackage*.msix' | Select-Object -First 1
+          if (-not $msix) { throw 'No MSIX produced' }
+          .\build\scripts\Test-WindowsTerminalPackage.ps1 -Path $msix.FullName
+
+          $out = New-Item -ItemType Directory -Force (Join-Path $env:GITHUB_WORKSPACE 'out')
+          $staged = Join-Path $out "WindowsTerminalDev_$($env:PACKAGE_VERSION)_x64.msix"
+          Copy-Item $msix.FullName $staged
+
+          $pfx = Join-Path $env:RUNNER_TEMP 'signing.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGNING_PFX_BASE64))
+          try {
+            $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.0.*\x64\signtool.exe" | Sort-Object FullName | Select-Object -Last 1
+            & $signtool.FullName sign /fd SHA256 /f $pfx /p $env:SIGNING_PFX_PASSWORD /tr http://timestamp.digicert.com /td SHA256 $staged
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+            $cert = [Security.Cryptography.X509Certificates.X509Certificate2]::new($pfx, $env:SIGNING_PFX_PASSWORD)
+            [IO.File]::WriteAllBytes((Join-Path $out 'terminal-dev.cer'), $cert.Export('Cert'))
+          } finally {
+            Remove-Item $pfx -Force
+          }
+
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [IO.Compression.ZipFile]::OpenRead($staged)
+          try {
+            $reader = [IO.StreamReader]::new($zip.GetEntry('AppxManifest.xml').Open())
+            $identity = ([xml]$reader.ReadToEnd()).Package.Identity
+            $reader.Dispose()
+          } finally { $zip.Dispose() }
+          if ($identity.Publisher -ne $env:PACKAGE_PUBLISHER -or $identity.Version -ne $env:PACKAGE_VERSION) {
+            throw "Packaged identity is $($identity.Version) / $($identity.Publisher)"
+          }
+
+          $deps = New-Item -ItemType Directory -Force (Join-Path $out 'Dependencies')
+          Get-ChildItem src\cascadia\CascadiaPackage\AppPackages -Recurse -Filter *.appx |
+            Where-Object { $_.Directory.Name -eq 'x64' -and $_.Directory.Parent.Name -eq 'Dependencies' } |
+            Copy-Item -Destination $deps
+          Copy-Item .github\terminal-dev\Install.ps1 $out
+          Get-ChildItem $out -Recurse | Select-Object FullName, Length | Format-Table -AutoSize
+
+      - uses: actions/upload-artifact@main
+        with:
+          name: terminal-dev-${{ env.PACKAGE_VERSION }}
+          path: out/
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@main
+        if: failure()
+        with:
+          name: msbuild-log-${{ github.run_number }}-${{ github.run_attempt }}
+          path: msbuild.binlog
+          if-no-files-found: ignore

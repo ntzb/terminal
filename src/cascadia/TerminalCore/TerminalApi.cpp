@@ -401,7 +401,8 @@ static bool _isValidClaudeSessionId(const std::wstring_view id) noexcept
 
 // Only absolute paths on a local drive letter ("C:\..."): UNC and device paths would
 // make every restore touch a host of the sender's choosing. The directory ends up
-// inside a quoted PowerShell string when restored, so quotes and % are refused too.
+// inside a quoted PowerShell string when restored, so quotes (including the typographic
+// ones PowerShell also treats as quotes) and % are refused too.
 static bool _isValidClaudeSessionDirectory(const std::wstring_view dir) noexcept
 {
     if (dir.size() < 3 || dir.size() > 4096 ||
@@ -411,7 +412,7 @@ static bool _isValidClaudeSessionDirectory(const std::wstring_view dir) noexcept
         return false;
     }
     return std::ranges::none_of(dir, [](const wchar_t ch) {
-        return ch < L' ' || ch == 0x7f || ch == L'"' || ch == L'\'' || ch == L'%';
+        return ch < L' ' || ch == 0x7f || ch == L'"' || ch == L'\'' || ch == L'%' || (ch >= 0x2018 && ch <= 0x201E);
     });
 }
 
@@ -433,6 +434,8 @@ void Terminal::SetClaudeSession(const std::wstring_view sessionId, const std::ws
 // cleared, so a late "ended" report can't wipe a session that replaced it.
 void Terminal::ClearClaudeSession(const std::wstring_view sessionId)
 {
+    _assertLocked();
+
     if (sessionId.empty() || til::equals_insensitive_ascii(sessionId, std::wstring_view{ _claudeSessionId }))
     {
         _claudeSessionId.clear();

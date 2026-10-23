@@ -25,13 +25,20 @@ namespace
 {
     // The two forms _claudeResumeCommandline produces, so a restored pane whose Claude
     // has since exited is persisted as its profile's plain shell again.
-    const std::wregex s_generatedPwshCommandline{ LR"(^.* -NoExit -Command "Set-Location -LiteralPath '[^']*'; & '(?:[^']|'')*' --resume [0-9a-f-]{36}"$)" };
-    const std::wregex s_generatedDirectCommandline{ LR"(^"[^"]*" --resume [0-9a-f-]{36}$)" };
-
     bool _isGeneratedClaudeCommandline(const winrt::hstring& commandline)
     {
-        return std::regex_match(commandline.c_str(), s_generatedPwshCommandline) ||
-               std::regex_match(commandline.c_str(), s_generatedDirectCommandline);
+        static const std::wregex generatedPwsh{ LR"(^.* -NoExit -Command "Set-Location -LiteralPath '[^']*'; & '(?:[^']|'')*' --resume [0-9a-f-]{36}"$)" };
+        static const std::wregex generatedDirect{ LR"(^"[^"]*" --resume [0-9a-f-]{36}$)" };
+        return std::regex_match(commandline.c_str(), generatedPwsh) ||
+               std::regex_match(commandline.c_str(), generatedDirect);
+    }
+
+    // PowerShell treats the typographic single quotes as quote characters too.
+    bool _hasQuoteLike(const std::wstring_view text) noexcept
+    {
+        return std::ranges::any_of(text, [](const wchar_t ch) {
+            return ch == L'"' || ch == L'\'' || ch == L'%' || (ch >= 0x2018 && ch <= 0x201E);
+        });
     }
 
     std::wstring _readRegistryPath(HKEY root, const wchar_t* subKey)
@@ -168,25 +175,18 @@ namespace
                                   til::equals_insensitive_ascii(exe, std::wstring_view{ L"powershell" });
         if (isPowerShell && !_pwshRunsSomething(arguments))
         {
-            // One quoted argument; the directory is validated to contain no quotes, and
-            // single quotes in the exe path are escaped PowerShell-style. Set-Location
+            // One quoted argument. Neither path contains anything quote-like (checked by
+            // the caller), so both are safe inside PowerShell single quotes. Set-Location
             // wins over a profile's -WorkingDirectory or a Set-Location in $PROFILE.
-            std::wstring exeLiteral{ claudeExe };
-            for (size_t i = exeLiteral.find(L'\''); i != std::wstring::npos; i = exeLiteral.find(L'\'', i + 2))
-            {
-                exeLiteral.insert(i, 1, L'\'');
-            }
-            return fmt::format(FMT_COMPILE(L"{} -NoExit -Command \"Set-Location -LiteralPath '{}'; & '{}' --resume {}\""), baseCommandline, directory, exeLiteral, sessionId);
+            return fmt::format(FMT_COMPILE(L"{} -NoExit -Command \"Set-Location -LiteralPath '{}'; & '{}' --resume {}\""), baseCommandline, directory, claudeExe, sessionId);
         }
         return fmt::format(FMT_COMPILE(L"\"{}\" --resume {}"), claudeExe, sessionId);
     }
-}
 
-namespace
-{
     // The command that resumes the Claude session running in this pane when the layout
-    // is restored, or empty if there is nothing (valid) to resume.
-    std::wstring _claudeRestoreCommandline(const Profile& profile, const TermControl& control)
+    // is restored, or empty if there is nothing (valid) to resume. directory receives the
+    // directory the command was built for.
+    std::wstring _claudeRestoreCommandline(const Profile& profile, const TermControl& control, std::wstring& directory)
     {
         if (!profile || !profile.ClaudeSessionRestore())
         {
@@ -198,14 +198,14 @@ namespace
             return {};
         }
         const auto sessionId = control.ClaudeSessionId();
-        const std::wstring directory{ control.ClaudeSessionDirectory() };
-        if (sessionId.empty() || directory.empty() || !_isUsableDirectory(directory))
+        directory = control.ClaudeSessionDirectory();
+        if (sessionId.empty() || !_isLocalDrivePath(directory) || _hasQuoteLike(directory) || !_isUsableDirectory(directory))
         {
             return {};
         }
-        // ConptyConnection expands %VARIABLES% in the command line.
+        // ConptyConnection expands %VARIABLES% in the command line, hence % in _hasQuoteLike.
         const auto claudeExe = _findClaudeExe();
-        if (claudeExe.empty() || claudeExe.find_first_of(L"\"%") != std::wstring::npos)
+        if (claudeExe.empty() || _hasQuoteLike(claudeExe))
         {
             return {};
         }
@@ -334,10 +334,11 @@ namespace winrt::TerminalApp::implementation
             {
                 args.Commandline(_profile.Commandline());
             }
-            if (const auto claudeCommandline = _claudeRestoreCommandline(_profile, _control); !claudeCommandline.empty())
+            std::wstring claudeDirectory;
+            if (const auto claudeCommandline = _claudeRestoreCommandline(_profile, _control, claudeDirectory); !claudeCommandline.empty())
             {
                 args.Commandline(claudeCommandline);
-                args.StartingDirectory(_control.ClaudeSessionDirectory());
+                args.StartingDirectory(claudeDirectory);
                 // No SessionId: replaying the old buffer would duplicate the conversation
                 // that the resumed session prints anyway.
                 break;

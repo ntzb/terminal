@@ -238,6 +238,16 @@ public:
         Log::Comment(L"ShowNotification MOCK called...");
     }
 
+    void SetClaudeSession(const std::wstring_view /*sessionId*/, const std::wstring_view /*directory*/) override
+    {
+        Log::Comment(L"SetClaudeSession MOCK called...");
+    }
+
+    void ClearClaudeSession(const std::wstring_view /*sessionId*/) override
+    {
+        Log::Comment(L"ClearClaudeSession MOCK called...");
+    }
+
     void PrepData()
     {
         PrepData(CursorDirection::UP); // if called like this, the cursor direction doesn't matter.

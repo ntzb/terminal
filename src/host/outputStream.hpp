@@ -75,6 +75,8 @@ public:
     void SearchMissingCommand(std::wstring_view missingCommand) override;
 
     void ShowNotification(std::wstring_view title, std::wstring_view body) override;
+    void SetClaudeSession(std::wstring_view sessionId, std::wstring_view directory) override;
+    void ClearClaudeSession(std::wstring_view sessionId) override;
 
 private:
     Microsoft::Console::IIoProvider& _io;

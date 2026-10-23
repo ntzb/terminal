@@ -1567,6 +1567,18 @@ namespace winrt::Microsoft::Terminal::Control::implementation
         return hstring{ _terminal->GetWorkingDirectory() };
     }
 
+    hstring ControlCore::ClaudeSessionId() const
+    {
+        const auto lock = _terminal->LockForReading();
+        return hstring{ _terminal->GetClaudeSessionId() };
+    }
+
+    hstring ControlCore::ClaudeSessionDirectory() const
+    {
+        const auto lock = _terminal->LockForReading();
+        return hstring{ _terminal->GetClaudeSessionDirectory() };
+    }
+
     bool ControlCore::BracketedPasteEnabled() const noexcept
     {
         const auto lock = _terminal->LockForReading();

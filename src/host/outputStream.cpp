@@ -463,3 +463,11 @@ void ConhostInternalGetSet::ShowNotification(std::wstring_view /*title*/, std::w
 {
     // Not implemented for conhost.
 }
+void ConhostInternalGetSet::SetClaudeSession(std::wstring_view /*sessionId*/, std::wstring_view /*directory*/)
+{
+    // Not implemented for conhost.
+}
+void ConhostInternalGetSet::ClearClaudeSession(std::wstring_view /*sessionId*/)
+{
+    // Not implemented for conhost.
+}

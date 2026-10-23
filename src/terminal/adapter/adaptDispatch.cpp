@@ -3858,6 +3858,25 @@ void AdaptDispatch::DoWTAction(const std::wstring_view string)
 // - string: contains the parameters that define the notification
 void AdaptDispatch::DoUrxvtAction(const std::wstring_view string)
 {
+    // Private extension, independent of desktop notifications: Claude Code hooks
+    // report which session runs here, so a persisted layout can resume it.
+    //   claude-session;set;<session id>;<directory>
+    //   claude-session;clear[;<session id>]
+    if (til::split_iterator split{ string, L';' }; split.next() == L"claude-session")
+    {
+        const auto operation = split.next();
+        if (operation == L"set")
+        {
+            const auto sessionId = split.next();
+            _api.SetClaudeSession(sessionId, split.remaining());
+        }
+        else if (operation == L"clear")
+        {
+            _api.ClearClaudeSession(split.remaining());
+        }
+        return;
+    }
+
     if (!_optionalFeatures.test(OptionalFeature::DesktopNotification))
     {
         return;

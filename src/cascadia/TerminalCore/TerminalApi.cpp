@@ -380,6 +380,66 @@ void Terminal::SearchMissingCommand(const std::wstring_view command)
     }
 }
 
+// A canonical 36 character GUID, e.g. 0f8fad5b-d9cb-469f-a165-70867728950e.
+static bool _isValidClaudeSessionId(const std::wstring_view id) noexcept
+{
+    if (id.size() != 36)
+    {
+        return false;
+    }
+    for (size_t i = 0; i < id.size(); ++i)
+    {
+        const auto ch = til::at(id, i);
+        const auto isDash = i == 8 || i == 13 || i == 18 || i == 23;
+        if (isDash ? ch != L'-' : !iswxdigit(ch))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Only absolute paths on a local drive letter ("C:\..."): UNC and device paths would
+// make every restore touch a host of the sender's choosing. The directory ends up
+// inside a quoted PowerShell string when restored, so quotes and % are refused too.
+static bool _isValidClaudeSessionDirectory(const std::wstring_view dir) noexcept
+{
+    if (dir.size() < 3 || dir.size() > 4096 ||
+        !((til::at(dir, 0) >= L'A' && til::at(dir, 0) <= L'Z') || (til::at(dir, 0) >= L'a' && til::at(dir, 0) <= L'z')) ||
+        til::at(dir, 1) != L':' || til::at(dir, 2) != L'\\')
+    {
+        return false;
+    }
+    return std::ranges::none_of(dir, [](const wchar_t ch) {
+        return ch < L' ' || ch == 0x7f || ch == L'"' || ch == L'\'' || ch == L'%';
+    });
+}
+
+void Terminal::SetClaudeSession(const std::wstring_view sessionId, const std::wstring_view directory)
+{
+    _assertLocked();
+
+    if (!_isValidClaudeSessionId(sessionId) || !_isValidClaudeSessionDirectory(directory))
+    {
+        return;
+    }
+
+    _claudeSessionId = sessionId;
+    std::ranges::transform(_claudeSessionId, _claudeSessionId.begin(), [](const wchar_t ch) { return til::tolower_ascii(ch); });
+    _claudeSessionDirectory = directory;
+}
+
+// An empty sessionId clears unconditionally. Otherwise only that session is
+// cleared, so a late "ended" report can't wipe a session that replaced it.
+void Terminal::ClearClaudeSession(const std::wstring_view sessionId)
+{
+    if (sessionId.empty() || til::equals_insensitive_ascii(sessionId, std::wstring_view{ _claudeSessionId }))
+    {
+        _claudeSessionId.clear();
+        _claudeSessionDirectory.clear();
+    }
+}
+
 void Terminal::ShowNotification(const std::wstring_view title, const std::wstring_view body)
 {
     if (_pfnShowNotification)

@@ -2827,6 +2827,11 @@
           "description": "When set to true, applications can send OSC 777 escape sequences to trigger desktop toast notifications with a custom title and body.",
           "type": "boolean"
         },
+        "claudeSessionRestore": {
+          "default": false,
+          "description": "When set to true, a pane running a Claude Code session (reported by Claude Code hooks via a private OSC 777 sequence) is saved in the persisted window layout as a command that resumes that session in its directory.",
+          "type": "boolean"
+        },
         "stickyNotifications": {
           "default": false,
           "description": "When set to true, toast notifications sent by applications (OSC 777) stay on screen until dismissed or clicked. They are removed automatically when the tab that sent them gets focus.",

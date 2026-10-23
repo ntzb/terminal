@@ -67,6 +67,10 @@ void Terminal::HardResetWithoutErase()
     _stateMachine->ResetState();
     auto& engine = reinterpret_cast<OutputStateMachineEngine&>(_stateMachine->Engine());
     engine.Dispatch().HardReset(false);
+
+    // A restarted connection runs a new process; whatever Claude session
+    // was running before is gone.
+    ClearClaudeSession({});
 }
 
 // Method Description:
@@ -281,6 +285,16 @@ bool Terminal::IsXtermBracketedPasteModeEnabled() const noexcept
 std::wstring_view Terminal::GetWorkingDirectory() noexcept
 {
     return _workingDirectory;
+}
+
+std::wstring_view Terminal::GetClaudeSessionId() const noexcept
+{
+    return _claudeSessionId;
+}
+
+std::wstring_view Terminal::GetClaudeSessionDirectory() const noexcept
+{
+    return _claudeSessionDirectory;
 }
 
 // Method Description:

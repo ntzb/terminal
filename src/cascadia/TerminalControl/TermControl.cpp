@@ -2613,6 +2613,16 @@ namespace winrt::Microsoft::Terminal::Control::implementation
         return _core.WorkingDirectory();
     }
 
+    hstring TermControl::ClaudeSessionId() const
+    {
+        return _core.ClaudeSessionId();
+    }
+
+    hstring TermControl::ClaudeSessionDirectory() const
+    {
+        return _core.ClaudeSessionDirectory();
+    }
+
     bool TermControl::BracketedPasteEnabled() const noexcept
     {
         return _core.BracketedPasteEnabled();

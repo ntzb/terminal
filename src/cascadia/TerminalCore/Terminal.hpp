@@ -99,6 +99,8 @@ public:
     void SetOptionalFeatures(winrt::Microsoft::Terminal::Core::ICoreSettings settings);
     bool IsXtermBracketedPasteModeEnabled() const noexcept;
     std::wstring_view GetWorkingDirectory() noexcept;
+    std::wstring_view GetClaudeSessionId() const noexcept;
+    std::wstring_view GetClaudeSessionDirectory() const noexcept;
 
     til::point GetViewportRelativeCursorPosition() const noexcept;
 
@@ -166,6 +168,9 @@ public:
     void SearchMissingCommand(const std::wstring_view command) override;
 
     void ShowNotification(const std::wstring_view title, const std::wstring_view body) override;
+
+    void SetClaudeSession(const std::wstring_view sessionId, const std::wstring_view directory) override;
+    void ClearClaudeSession(const std::wstring_view sessionId) override;
 
 #pragma endregion
 
@@ -382,6 +387,8 @@ private:
 
     std::wstring _answerbackMessage;
     std::wstring _workingDirectory;
+    std::wstring _claudeSessionId;
+    std::wstring _claudeSessionDirectory;
     bool _highContrastMode = false;
 
     // This default fake font value is only used to check if the font is a raster font.
